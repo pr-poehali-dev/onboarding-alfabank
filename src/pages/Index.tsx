@@ -97,9 +97,11 @@ type Step = 'welcome' | 'business' | 'loading' | 'programs' | 'details' | 'succe
 function Index() {
   const [step, setStep] = useState<Step>('welcome');
   const [selectedBusinesses, setSelectedBusinesses] = useState<string[]>([]);
-  const [userData, setUserData] = useState({ name: '', phone: '', email: '' });
+  const [userData, setUserData] = useState({ phone: '' });
   const [loadingProgress, setLoadingProgress] = useState(0);
   const [visiblePrograms, setVisiblePrograms] = useState<number>(0);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [foundProgramsCount, setFoundProgramsCount] = useState(0);
 
   const progress = {
     welcome: 0,
@@ -145,9 +147,27 @@ function Index() {
   }, [step]);
 
   const toggleBusiness = (id: string) => {
-    setSelectedBusinesses(prev =>
-      prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]
-    );
+    const newSelected = selectedBusinesses.includes(id)
+      ? selectedBusinesses.filter(b => b !== id)
+      : [...selectedBusinesses, id];
+    
+    setSelectedBusinesses(newSelected);
+    
+    if (newSelected.length > 0) {
+      setIsCalculating(true);
+      setFoundProgramsCount(0);
+      
+      setTimeout(() => {
+        const count = newSelected.reduce((acc, businessId) => {
+          return acc + (loyaltyPrograms[businessId as keyof typeof loyaltyPrograms]?.length || 0);
+        }, 0);
+        setFoundProgramsCount(Math.min(count, 8));
+        setIsCalculating(false);
+      }, 800);
+    } else {
+      setFoundProgramsCount(0);
+      setIsCalculating(false);
+    }
   };
 
   const handleBusinessNext = () => {
@@ -235,11 +255,24 @@ function Index() {
               </div>
 
               {selectedBusinesses.length > 0 && (
-                <div className="flex items-center gap-2 flex-wrap animate-fade-in">
-                  <span className="text-sm text-muted-foreground">Выбрано:</span>
-                  <Badge variant="secondary" className="animate-scale-in">
-                    {selectedBusinesses.length} {selectedBusinesses.length === 1 ? 'категория' : 'категории'}
-                  </Badge>
+                <div className="space-y-2 animate-fade-in">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm text-muted-foreground">Выбрано:</span>
+                    <Badge variant="secondary" className="animate-scale-in">
+                      {selectedBusinesses.length} {selectedBusinesses.length === 1 ? 'категория' : 'категории'}
+                    </Badge>
+                  </div>
+                  {isCalculating ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground animate-pulse">
+                      <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <span>Подбираем программы...</span>
+                    </div>
+                  ) : foundProgramsCount > 0 ? (
+                    <div className="flex items-center gap-2 text-sm font-medium text-primary animate-fade-in">
+                      <Icon name="Sparkles" size={16} />
+                      <span>Нашли {foundProgramsCount} {foundProgramsCount === 1 ? 'программу' : foundProgramsCount < 5 ? 'программы' : 'программ'}!</span>
+                    </div>
+                  ) : null}
                 </div>
               )}
 
@@ -278,10 +311,10 @@ function Index() {
                 <Button
                   size="lg"
                   onClick={handleBusinessNext}
-                  disabled={selectedBusinesses.length === 0}
+                  disabled={selectedBusinesses.length === 0 || isCalculating}
                   className="px-6 md:px-8 text-sm md:text-base"
                 >
-                  Продолжить
+                  {isCalculating ? 'Подбираем...' : 'Продолжить'}
                   <Icon name="ArrowRight" size={18} className="ml-2" />
                 </Button>
               </div>
@@ -373,64 +406,65 @@ function Index() {
           )}
 
           {step === 'details' && (
-            <div className="max-w-md mx-auto space-y-4 md:space-y-6 animate-fade-in">
+            <div className="max-w-lg mx-auto space-y-4 md:space-y-6 animate-fade-in">
               <div className="space-y-2 text-center">
-                <div className="text-4xl md:text-5xl mb-3">🎁</div>
-                <h2 className="text-2xl md:text-3xl font-bold text-foreground">Почти готово!</h2>
-                <p className="text-sm md:text-base text-muted-foreground px-4">
-                  Куда отправить ваши персональные предложения?
-                </p>
+                <h2 className="text-2xl md:text-3xl font-bold text-foreground">Заявка на открытие счёта<br />для бизнеса</h2>
               </div>
 
-              <Card className="p-5 md:p-6 shadow-xl">
+              <Card className="p-6 md:p-8 shadow-xl bg-gray-50">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name" className="text-sm md:text-base">Ваше имя</Label>
-                    <Input
-                      id="name"
-                      placeholder="Иван"
-                      value={userData.name}
-                      onChange={(e) => setUserData({ ...userData, name: e.target.value })}
-                      className="h-11 md:h-12 text-sm md:text-base"
-                    />
+                    <Label htmlFor="phone" className="text-sm md:text-base text-muted-foreground">Мобильный телефон</Label>
+                    <div className="flex gap-2">
+                      <span className="flex items-center px-3 h-12 md:h-14 bg-white border border-gray-300 rounded-lg text-sm md:text-base font-medium">+7</span>
+                      <Input
+                        id="phone"
+                        type="tel"
+                        placeholder=""
+                        value={userData.phone}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                          setUserData({ phone: value });
+                        }}
+                        className="h-12 md:h-14 text-sm md:text-base flex-1"
+                      />
+                    </div>
+                    {userData.phone.length > 0 && userData.phone.length < 10 && (
+                      <p className="text-xs text-destructive flex items-center gap-1">
+                        <Icon name="AlertCircle" size={12} />
+                        Поле обязательно для заполнения
+                      </p>
+                    )}
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="phone" className="text-sm md:text-base">Телефон</Label>
-                    <Input
-                      id="phone"
-                      type="tel"
-                      placeholder="+7 (900) 123-45-67"
-                      value={userData.phone}
-                      onChange={(e) => setUserData({ ...userData, phone: e.target.value })}
-                      className="h-11 md:h-12 text-sm md:text-base"
-                    />
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="lg"
+                      className="flex-1 h-12 md:h-14 text-sm md:text-base"
+                      onClick={() => setStep('programs')}
+                    >
+                      Перезвонить мне
+                    </Button>
+                    <Button
+                      size="lg"
+                      className="flex-1 h-12 md:h-14 text-sm md:text-base bg-primary hover:bg-primary/90"
+                      onClick={handleSubmit}
+                      disabled={userData.phone.length !== 10}
+                    >
+                      Отправить заявку
+                    </Button>
                   </div>
 
-                  <div className="space-y-2">
-                    <Label htmlFor="email" className="text-sm md:text-base">Email</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="ivan@company.ru"
-                      value={userData.email}
-                      onChange={(e) => setUserData({ ...userData, email: e.target.value })}
-                      className="h-11 md:h-12 text-sm md:text-base"
-                    />
+                  <div className="flex items-start gap-2 p-3 bg-white/50 rounded-lg">
+                    <Icon name="Shield" size={16} className="text-muted-foreground mt-0.5 flex-shrink-0" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Мы гарантируем безопасность и сохранность ваших данных
+                    </p>
                   </div>
-
-                  <Button
-                    size="lg"
-                    className="w-full h-11 md:h-12 text-sm md:text-base"
-                    onClick={handleSubmit}
-                    disabled={!userData.name || !userData.phone || !userData.email}
-                  >
-                    Отправить
-                    <Icon name="Send" size={16} className="ml-2" />
-                  </Button>
 
                   <p className="text-xs text-center text-muted-foreground leading-relaxed">
-                    Нажимая кнопку, вы соглашаетесь с политикой обработки персональных данных
+                    Нажимая кнопку «Отправить заявку» или «Перезвонить мне», вы подтверждаете, что согласны на обработку персональных данных
                   </p>
                 </div>
               </Card>
@@ -446,10 +480,10 @@ function Index() {
               </div>
               <div className="space-y-3 md:space-y-4 px-4">
                 <h2 className="text-3xl md:text-4xl font-bold text-foreground">
-                  Отлично, {userData.name}! 🎉
+                  Отлично! 🎉
                 </h2>
                 <p className="text-lg md:text-xl text-muted-foreground max-w-md mx-auto">
-                  Мы отправили ваши персональные предложения на <span className="font-semibold text-foreground">{userData.email}</span>
+                  Ваша заявка принята! Мы свяжемся с вами по номеру <span className="font-semibold text-foreground">+7 {userData.phone}</span>
                 </p>
                 <p className="text-sm md:text-base text-muted-foreground">
                   Наш менеджер свяжется с вами в ближайшее время
